@@ -7,6 +7,7 @@
             v-model="articleForm.title" 
             placeholder="请输入文章标题"
             clearable
+            class="title-input"
           />
         </el-form-item>
         
@@ -14,6 +15,20 @@
           <div ref="vditorRef" class="vditor-wrapper"></div>
         </el-form-item>
       </el-form>
+      
+      <!-- 添加发布按钮 -->
+      <div class="form-actions">
+        <el-button 
+          type="primary" 
+          @click="submitArticle"
+          class="publish-button"
+        >
+          发布文章
+        </el-button>
+        <el-button @click="saveAsDraft">
+          保存草稿
+        </el-button>
+      </div>
     </el-card>
   </div>
 </template>
@@ -116,13 +131,20 @@ const submitArticle = () => {
   // 这里应该调用API提交文章
   console.log('提交文章:', articleForm)
   ElMessage.success('文章发布成功!')
-  
-  // 重置表单
-  articleForm.title = ''
-  articleForm.content = ''
-  if (vditor) {
-    vditor.setValue('')
+
+}
+
+// 保存草稿功能
+const saveAsDraft = () => {
+  // 校验文章标题
+  if (!articleForm.title.trim()) {
+    ElMessage.warning('请输入文章标题')
+    return
   }
+
+  // 这里应该调用API保存草稿
+  console.log('保存草稿:', articleForm)
+  ElMessage.success('草稿保存成功!')
 }
 
 // 快捷键处理
@@ -167,5 +189,60 @@ onBeforeUnmount(() => {
 .vditor-wrapper {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
+}
+
+/* 新增样式 */
+.article-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.title-input :deep(.el-input__inner) {
+  border: none;
+  border-bottom: 1px solid #dcdfe6;
+  border-radius: 0;
+  font-size: 18px;
+  padding: 12px 0;
+  height: auto;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.title-input :deep(.el-input__inner:focus) {
+  border-color: #42b883;
+  box-shadow: 0 0 0 2px rgba(66, 184, 131, 0.1);
+  outline: none;
+}
+
+:deep(.vditor-toolbar) {
+  background-color: #f8f8f8;
+  border-bottom: 1px solid #ebeef5;
+}
+
+:deep(.vditor-toolbar__item button:hover) {
+  background-color: #ebeef5;
+  color: #35495e;
+}
+
+:deep(.vditor-content) {
+  padding: 20px;
+}
+
+:deep(.vditor) {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #ebeef5;
+}
+
+.publish-button {
+  background-color: #42b883;
+  border-color: #42b883;
 }
 </style>
