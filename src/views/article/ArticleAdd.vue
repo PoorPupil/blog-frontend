@@ -1,15 +1,6 @@
 <template>
   <div class="article-add-container">
     <el-card class="article-card">
-      <template #header>
-        <div class="card-header">
-          <span>添加新文章</span>
-          <div>
-            <el-button type="primary" @click="submitArticle">发布文章</el-button>
-          </div>
-        </div>
-      </template>
-      
       <el-form :model="articleForm" label-position="top">
         <el-form-item label="文章标题">
           <el-input 
@@ -20,39 +11,7 @@
         </el-form-item>
         
         <el-form-item label="文章内容">
-          <div class="editor-container">
-            <div class="editor-toolbar">
-              <el-button-group>
-                <el-button @click="insertText('# ')"># 标题</el-button>
-                <el-button @click="insertText('**', '**')">**粗体**</el-button>
-                <el-button @click="insertText('*', '*')">斜体</el-button>
-                <el-button @click="insertText('> ')">引用</el-button>
-                <el-button @click="insertText('- ')">列表</el-button>
-                <el-button @click="insertText('`', '`')">代码</el-button>
-              </el-button-group>
-            </div>
-            
-            <div class="editor-wrapper">
-              <textarea
-                ref="editorRef"
-                v-model="articleForm.content"
-                class="editor-textarea"
-                placeholder="请输入文章内容，支持Markdown语法..."
-                @keydown.tab.exact.prevent="insertText('  ')"
-                @keydown.ctrl.quotemark.prevent="insertText('`', '`')"
-                @keydown.ctrl.b.prevent="insertText('**', '**')"
-                @keydown.ctrl.i.prevent="insertText('*', '*')"
-                @keydown.ctrl.enter.prevent="submitArticle"
-              />
-              
-              <div class="editor-preview">
-                <div class="preview-header">
-                  <span>预览效果</span>
-                </div>
-                <div class="preview-content markdown-body" v-html="previewContent"></div>
-              </div>
-            </div>
-          </div>
+          <div ref="vditorRef" class="vditor-wrapper"></div>
         </el-form-item>
       </el-form>
     </el-card>
@@ -60,21 +19,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { marked } from 'marked'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.css'
-import { markedHighlight } from 'marked-highlight'
-
-// 配置marked支持代码高亮
-marked.use(markedHighlight({
-  langPrefix: 'hljs language-',
-  highlight(code: string, lang?: string) {
-    const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
-    return hljs.highlight(code, { language }).value
-  }
-}))
+import Vditor from 'vditor'
+import 'vditor/dist/index.css'
 
 // 定义表单数据
 const articleForm = reactive({
@@ -82,38 +30,73 @@ const articleForm = reactive({
   content: ''
 })
 
-// 编辑器引用
-const editorRef = ref<HTMLTextAreaElement | null>(null)
+// Vditor实例引用
+const vditorRef = ref<HTMLDivElement | null>(null)
+let vditor: Vditor | null = null
 
-// 预览内容计算属性
-const previewContent = computed(() => {
-  return marked.parse(articleForm.content || '')
-})
+// 计算Vditor高度
+const calculateVditorHeight = () => {
+  if (!vditorRef.value) return 500
 
-// 插入文本到编辑器
-const insertText = (before: string, after: string = '') => {
-  const editor = editorRef.value
-  if (!editor) return
+  // 获取卡片元素
+  const cardElement = vditorRef.value.closest('.el-card')
+  if (!cardElement) return 500
   
-  const startPos = editor.selectionStart
-  const endPos = editor.selectionEnd
-  const text = articleForm.content
-  const selectedText = text.substring(startPos, endPos)
+  // 获取已使用高度
+  const headerHeight = cardElement.querySelector('.el-card__header')?.clientHeight || 0
+  const formItemsHeight = Array.from(cardElement.querySelectorAll('.el-form-item:not(:last-child)'))
+    .reduce((acc, item) => acc + (item as HTMLElement).clientHeight, 0)
   
-  // 插入文本
-  articleForm.content = 
-    text.substring(0, startPos) + 
-    before + 
-    selectedText + 
-    after + 
-    text.substring(endPos)
+  // 计算剩余高度 (减去一些间距)
+  const usedHeight = headerHeight + formItemsHeight + 60 // 60为额外间距
+  const windowHeight = window.innerHeight
+  const cardRect = cardElement.getBoundingClientRect()
+  const cardTop = cardRect.top
   
-  // 设置光标位置
-  setTimeout(() => {
-    const newCursorPos = startPos + before.length + selectedText.length
-    editor.focus()
-    editor.setSelectionRange(newCursorPos, newCursorPos)
-  }, 0)
+  // 计算可用高度
+  const availableHeight = windowHeight - cardTop - usedHeight - 30 // 30为底部预留空间
+  
+  // 返回最小300像素，最大800像素的高度
+  return Math.max(300, availableHeight)
+}
+
+// 初始化Vditor
+const initVditor = () => {
+  if (!vditorRef.value) return
+  
+  const height = calculateVditorHeight()
+  
+  vditor = new Vditor(vditorRef.value, {
+    height: height,
+    width: '100%',
+    toolbarConfig: {
+      pin: true,
+    },
+    cache: {
+      enable: false,
+    },
+    preview: {
+      markdown: {
+        sanitize: true,
+      },
+    },
+    input(value) {
+      articleForm.content = value
+    },
+    after: () => {
+      if (vditor) {
+        vditor.setValue(articleForm.content)
+      }
+    }
+  })
+}
+
+// 窗口大小变化时重新调整Vditor高度
+const handleResize = () => {
+  if (vditor) {
+    const newHeight = calculateVditorHeight()
+    vditor.setHeight(newHeight)
+  }
 }
 
 // 提交文章
@@ -137,6 +120,9 @@ const submitArticle = () => {
   // 重置表单
   articleForm.title = ''
   articleForm.content = ''
+  if (vditor) {
+    vditor.setValue('')
+  }
 }
 
 // 快捷键处理
@@ -151,11 +137,17 @@ const handleKeyDown = (event: KeyboardEvent) => {
 // 添加事件监听器
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('resize', handleResize)
+  initVditor()
 })
 
 // 移除事件监听器
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('resize', handleResize)
+  if (vditor) {
+    vditor.destroy()
+  }
 })
 </script>
 
@@ -172,139 +164,8 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
-.editor-container {
+.vditor-wrapper {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
-  overflow: hidden;
-}
-
-.editor-toolbar {
-  padding: 10px;
-  border-bottom: 1px solid #dcdfe6;
-  background-color: #f5f7fa;
-}
-
-.editor-wrapper {
-  display: flex;
-  height: 500px;
-}
-
-.editor-textarea {
-  flex: 1;
-  padding: 15px;
-  border: none;
-  resize: none;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.5;
-  outline: none;
-}
-
-.editor-textarea:focus {
-  outline: none;
-}
-
-.editor-preview {
-  flex: 1;
-  border-left: 1px solid #dcdfe6;
-  display: flex;
-  flex-direction: column;
-  overflow: auto;
-}
-
-.preview-header {
-  padding: 10px 15px;
-  border-bottom: 1px solid #dcdfe6;
-  background-color: #f5f7fa;
-  font-weight: bold;
-}
-
-.preview-content {
-  flex: 1;
-  padding: 15px;
-  overflow: auto;
-}
-
-/* Markdown样式 */
-.markdown-body {
-  line-height: 1.6;
-  color: #333;
-  font-size: 15px;
-}
-
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3 {
-  margin-top: 24px;
-  margin-bottom: 16px;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-.markdown-body h1 {
-  font-size: 2em;
-  border-bottom: 1px solid #eaecef;
-  padding-bottom: 0.3em;
-}
-
-.markdown-body h2 {
-  font-size: 1.5em;
-  border-bottom: 1px solid #eaecef;
-  padding-bottom: 0.3em;
-}
-
-.markdown-body p {
-  margin-top: 0;
-  margin-bottom: 16px;
-}
-
-.markdown-body a {
-  color: #0366d6;
-  text-decoration: none;
-}
-
-.markdown-body a:hover {
-  text-decoration: underline;
-}
-
-.markdown-body pre {
-  padding: 16px;
-  overflow: auto;
-  background-color: #282c34;
-  border-radius: 6px;
-  margin: 16px 0;
-}
-
-.markdown-body code {
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 85%;
-}
-
-.markdown-body pre code {
-  background: transparent;
-  padding: 0;
-}
-
-.markdown-body blockquote {
-  margin: 0;
-  padding: 0 1em;
-  color: #6a737d;
-  border-left: 0.25em solid #dfe2e5;
-  background-color: #f9f9f9;
-}
-
-.markdown-body ul,
-.markdown-body ol {
-  padding-left: 2em;
-  margin-top: 0;
-  margin-bottom: 16px;
-}
-
-.markdown-body li {
-  margin-bottom: 4px;
-}
-
-.markdown-body li > p {
-  margin-top: 16px;
 }
 </style>

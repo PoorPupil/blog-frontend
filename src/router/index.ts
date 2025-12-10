@@ -23,9 +23,9 @@ const router = createRouter({
       component: () => import('../views/test/ArticleList.vue'),
     },
     {
-      path: 'article/publish',
+      path: '/article/publish',
       name: 'ArticlePublish',
-      component: () => import('../views/article/ArticlePublish.vue'),
+      component: () => import('../views/article/ArticleAdd.vue'),
     }
   ],
 })
