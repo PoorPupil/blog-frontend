@@ -15,20 +15,6 @@
           <div ref="vditorRef" class="vditor-wrapper"></div>
         </el-form-item>
       </el-form>
-      
-      <!-- 添加发布按钮 -->
-      <div class="form-actions">
-        <el-button 
-          type="primary" 
-          @click="submitArticle"
-          class="publish-button"
-        >
-          发布文章
-        </el-button>
-        <el-button @click="saveAsDraft">
-          保存草稿
-        </el-button>
-      </div>
     </el-card>
   </div>
 </template>
@@ -38,9 +24,11 @@ import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
+import { publishArticle, updateById } from '@/api/articles'
 
 // 定义表单数据
 const articleForm = reactive({
+  id: null,
   title: '',
   content: ''
 })
@@ -115,7 +103,7 @@ const handleResize = () => {
 }
 
 // 提交文章
-const submitArticle = () => {
+const submitArticle = async () => {
   // 校验文章标题
   if (!articleForm.title.trim()) {
     ElMessage.warning('请输入文章标题')
@@ -128,23 +116,51 @@ const submitArticle = () => {
     return
   }
   
-  // 这里应该调用API提交文章
-  console.log('提交文章:', articleForm)
-  ElMessage.success('文章发布成功!')
+  try {
+    // 调用API提交文章
+    const result = await publishArticle({
+      title: articleForm.title,
+      content: articleForm.content
+    })
 
+    console.log('发布文章结果:', result)
+
+    // 从返回结果获取Id
+    articleForm.id = result || null
+    
+    ElMessage.success('文章发布成功!')
+  } catch (error) {
+    console.error('发布文章失败:', error)
+    ElMessage.error('文章发布失败!')
+  }
 }
 
 // 保存草稿功能
-const saveAsDraft = () => {
+const updateArticle = async () => {
+  // 校验id
+  if (!articleForm.id) {
+    ElMessage.warning('异常！应该是新增文章，现在缺少文章Id');
+  }
+
   // 校验文章标题
   if (!articleForm.title.trim()) {
     ElMessage.warning('请输入文章标题')
     return
   }
 
-  // 这里应该调用API保存草稿
-  console.log('保存草稿:', articleForm)
-  ElMessage.success('草稿保存成功!')
+  try {
+    // 调用API保存草稿
+    await updateById({
+      id: articleForm.id,
+      title: articleForm.title,
+      content: articleForm.content
+    })
+    
+    ElMessage.success('保存成功!')
+  } catch (error) {
+    console.error('保存失败:', error)
+    ElMessage.error('保存失败!')
+  }
 }
 
 // 快捷键处理
@@ -152,7 +168,12 @@ const handleKeyDown = (event: KeyboardEvent) => {
   // Ctrl + S 保存
   if (event.ctrlKey && event.key === 's') {
     event.preventDefault()
-    submitArticle()
+    console.log('id:', articleForm.id);
+    if (articleForm.id){
+      updateArticle()
+    }else {
+      submitArticle()
+    }
   }
 }
 
