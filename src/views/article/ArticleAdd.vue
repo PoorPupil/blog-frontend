@@ -3,14 +3,9 @@
     <el-card class="article-card">
       <el-form :model="articleForm" label-position="top">
         <el-form-item label="文章标题">
-          <el-input 
-            v-model="articleForm.title" 
-            placeholder="请输入文章标题"
-            clearable
-            class="title-input"
-          />
+          <el-input v-model="articleForm.title" placeholder="请输入文章标题" clearable class="title-input" />
         </el-form-item>
-        
+
         <el-form-item label="文章内容">
           <div ref="vditorRef" class="vditor-wrapper"></div>
         </el-form-item>
@@ -21,14 +16,15 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
-import { publishArticle, updateById } from '@/api/articles'
+import { publishArticle, updateById, getArticleById } from '@/api/articles'
 
 // 定义表单数据
-const articleForm = reactive({
-  id: null,
+const articleForm = reactive<{ id?: number; title: string; content: string }>({
+  id: undefined,
   title: '',
   content: ''
 })
@@ -36,6 +32,8 @@ const articleForm = reactive({
 // Vditor实例引用
 const vditorRef = ref<HTMLDivElement | null>(null)
 let vditor: Vditor | null = null
+const route = useRoute()
+const router = useRouter()
 
 // 计算Vditor高度
 const calculateVditorHeight = () => {
@@ -44,21 +42,21 @@ const calculateVditorHeight = () => {
   // 获取卡片元素
   const cardElement = vditorRef.value.closest('.el-card')
   if (!cardElement) return 500
-  
+
   // 获取已使用高度
   const headerHeight = cardElement.querySelector('.el-card__header')?.clientHeight || 0
   const formItemsHeight = Array.from(cardElement.querySelectorAll('.el-form-item:not(:last-child)'))
     .reduce((acc, item) => acc + (item as HTMLElement).clientHeight, 0)
-  
+
   // 计算剩余高度 (减去一些间距)
   const usedHeight = headerHeight + formItemsHeight + 60 // 60为额外间距
   const windowHeight = window.innerHeight
   const cardRect = cardElement.getBoundingClientRect()
   const cardTop = cardRect.top
-  
+
   // 计算可用高度
   const availableHeight = windowHeight - cardTop - usedHeight - 30 // 30为底部预留空间
-  
+
   // 返回最小300像素，最大800像素的高度
   return Math.max(300, availableHeight)
 }
@@ -66,9 +64,9 @@ const calculateVditorHeight = () => {
 // 初始化Vditor
 const initVditor = () => {
   if (!vditorRef.value) return
-  
+
   const height = calculateVditorHeight()
-  
+
   vditor = new Vditor(vditorRef.value, {
     height: height,
     width: '100%',
@@ -98,7 +96,7 @@ const initVditor = () => {
 const handleResize = () => {
   if (vditor) {
     const newHeight = calculateVditorHeight()
-    vditor.setHeight(newHeight)
+      ; (vditor as any).setHeight?.(newHeight)
   }
 }
 
@@ -115,7 +113,7 @@ const submitArticle = async () => {
     ElMessage.warning('请输入文章内容')
     return
   }
-  
+
   try {
     // 调用API提交文章
     const result = await publishArticle({
@@ -126,8 +124,8 @@ const submitArticle = async () => {
     console.log('发布文章结果:', result)
 
     // 从返回结果获取Id
-    articleForm.id = result || null
-    
+    articleForm.id = result ?? undefined
+
     ElMessage.success('文章发布成功!')
   } catch (error) {
     console.error('发布文章失败:', error)
@@ -151,11 +149,11 @@ const updateArticle = async () => {
   try {
     // 调用API保存草稿
     await updateById({
-      id: articleForm.id,
+      id: articleForm.id ?? undefined,
       title: articleForm.title,
       content: articleForm.content
     })
-    
+
     ElMessage.success('保存成功!')
   } catch (error) {
     console.error('保存失败:', error)
@@ -164,15 +162,38 @@ const updateArticle = async () => {
 }
 
 // 快捷键处理
-const handleKeyDown = (event: KeyboardEvent) => {
+const handleKeyDown = async (event: KeyboardEvent) => {
   // Ctrl + S 保存
   if (event.ctrlKey && event.key === 's') {
     event.preventDefault()
     console.log('id:', articleForm.id);
-    if (articleForm.id){
+    if (articleForm.id) {
       updateArticle()
-    }else {
+    } else {
       submitArticle()
+    }
+    return
+  }
+
+  // Esc 键保存并退出
+  if (event.key === 'Escape') {
+    const ae = document.activeElement as HTMLElement | null
+    const focusingTitle = !!ae?.closest('.title-input')
+    const focusingEditor = !!ae?.closest('.vditor')
+    if (focusingTitle || focusingEditor) {
+      ae?.blur()
+      return
+    }
+    try {
+      if (articleForm.id) {
+        await updateArticle()
+      } else {
+        await submitArticle()
+      }
+      router.back()
+    } catch (error: any) {
+      console.error('保存失败', error)
+      ElMessage.error(error?.message || error?.response?.data?.message || '保存失败')
     }
   }
 }
@@ -182,6 +203,23 @@ onMounted(() => {
   document.addEventListener('keydown', handleKeyDown)
   window.addEventListener('resize', handleResize)
   initVditor()
+  const idStr = route.query.id as string | undefined
+  if (idStr) {
+    const id = Number(idStr)
+    if (!Number.isNaN(id)) {
+      getArticleById(id).then(detail => {
+        articleForm.id = detail.id
+        articleForm.title = detail.title
+        articleForm.content = detail.content
+        if (vditor) {
+          vditor.setValue(articleForm.content || '')
+        }
+      }).catch((error: any) => {
+        console.error('加载文章详情失败', error)
+        ElMessage.error(error?.message || error?.response?.data?.message || '加载文章详情失败')
+      })
+    }
+  }
 })
 
 // 移除事件监听器
